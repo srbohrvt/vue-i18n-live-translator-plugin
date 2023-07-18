@@ -1,6 +1,6 @@
 import Vue, { VueConstructor } from 'vue'
 import VueI18n from 'vue-i18n'
-import _ from 'lodash'
+import throttle from 'lodash/throttle'
 
 const css = `
 .live-translator-enable-button {
@@ -274,7 +274,7 @@ export const LiveTranslatorPlugin = {
       },
     }
 
-    const throttler = _.throttle(visualize, 800)
+    const throttler = throttle(visualize, 800)
     const observer = new MutationObserver(throttler)
     observer.observe(document.documentElement,
       {

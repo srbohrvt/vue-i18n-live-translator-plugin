@@ -2,10 +2,13 @@
   "name": "vue-i18n-live-translator-plugin",
   "version": "1.0.0",
   "description": "",
-  "main": "index.js",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "scripts": {
+    "build": "tsc --declaration",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
+  "pre-commit": "build",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/apicore-engineering/vue-i18n-live-translator-plugin.git"
@@ -18,10 +21,12 @@
   "homepage": "https://github.com/apicore-engineering/vue-i18n-live-translator-plugin#readme",
   "dependencies": {
     "lodash": "^4.17.21",
+    "typescript": "^5.1.6",
     "vue": "^2.7.14",
     "vue-i18n": "^8.28.2"
   },
   "devDependencies": {
-    "@types/lodash": "^4.14.195"
+    "@types/lodash": "^4.14.195",
+    "pre-commit": "^1.2.2"
   }
 }
