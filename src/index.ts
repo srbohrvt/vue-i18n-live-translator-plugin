@@ -55,15 +55,28 @@ const css = `
   box-shadow: 0px 0px 5px #00c0ff !important;
 }
 `
+export type TranslationMeta = {
+  locale: string,
+  message: string,
+  values: unknown,
+  path: string,
+}
 
-class ZeroWidthEncoder {
-  START = '\u200B'
-  ZERO = '\u200C'
-  ONE = '\u200D'
-  SPACE = '\u200E'
-  END = '\u200F'
+type LiveTranslatorPluginOptions = {
+  i18n: VueI18n
+  translationLink: (meta: TranslationMeta) => string
+  persist?: boolean
+}
 
-  encode (text: string) {
+abstract class ZeroWidthEncoder {
+  static START = '\u200B'
+  static ZERO = '\u200C'
+  static ONE = '\u200D'
+  static SPACE = '\u200E'
+  static END = '\u200F'
+  static PATTERN = `${this.START}[${this.ZERO}${this.ONE}${this.SPACE}]+${this.END}`
+
+  static encode (text: string) {
     const binary = text
       .split('')
       .map((char) => char.charCodeAt(0).toString(2))
@@ -84,7 +97,7 @@ class ZeroWidthEncoder {
     return this.START + zeroWidth + this.END
   }
 
-  decode (zeroWidth: string) {
+  static decode (zeroWidth: string) {
     const binary = zeroWidth
       .split('')
       .slice(1, zeroWidth.length - 1) // remove START and END
@@ -106,24 +119,87 @@ class ZeroWidthEncoder {
   }
 }
 
-class LiveTranslatorEnabler {
+class LiveTranslatorManager {
   _enabled: boolean
-  persist: boolean
+  _options: LiveTranslatorPluginOptions
+  _callback: CallableFunction
 
-  constructor (persist: boolean) {
+  _enableButton: HTMLButtonElement
+  _indicator: HTMLSpanElement
+
+  constructor (options: LiveTranslatorPluginOptions) {
     this._enabled = false
-    this.persist = persist
+    this._options = options
+
+    // handle persistance
     const savedRaw = localStorage.getItem('live-translator-enabled')
-    if (persist && savedRaw) {
+    if (this._options.persist && savedRaw) {
       const saved = JSON.parse(savedRaw)
       if (typeof saved === 'boolean') {
         this.toggle(saved)
       }
     }
+
+    // initialize UI
+    this._enableButton = document.createElement('button')
+    this._indicator = document.createElement('span')
+    const style = document.createElement('style')
+
+    style.id = 'live-translator-plugin-style'
+    style.innerHTML = css
+    document.head.appendChild(style)
+
+    this._enableButton.innerText = 'LT'
+    this._enableButton.classList.add('live-translator-enable-button')
+    this._indicator.classList.add('live-translator-enable-button-indicator')
+    this._enableButton.appendChild(this._indicator)
+    this._enableButton.addEventListener('click', () => {
+      this.toggle()
+      this.refreshI18n()
+      this.render()
+    })
+    document.body.appendChild(this._enableButton)
+
+    // initialize encode
+    const originalFormatter = this._options.i18n.formatter
+    const self = this
+    this._options.i18n.formatter = {
+      interpolate (message, values, path) {
+        const meta = ZeroWidthEncoder.encode(
+          JSON.stringify({
+            message,
+            values,
+            path,
+            locale: self._options.i18n.locale,
+          }),
+        )
+        const original = originalFormatter.interpolate(message, values, path) as unknown[] | null
+        return (original && self._enabled) ? [meta, ...original] : original
+      },
+    }
+
+    // initialize decode & render
+    const throttler = throttle(() => this.render(), 800)
+    const observer = new MutationObserver(throttler)
+    observer.observe(document.documentElement,
+      {
+        subtree: true,
+        attributes: true,
+        characterData: true,
+        childList: false,
+      },
+    )
+    document.documentElement.addEventListener('mousemove', throttler)
+
+    // render for the first time
+    this.refreshI18n()
+    this.render()
   }
 
-  enabled () {
-    return this._enabled
+  refreshI18n () {
+    const originalLocale = this._options.i18n.locale
+    this._options.i18n.locale = ''
+    this._options.i18n.locale = originalLocale
   }
 
   toggle (enable?: boolean) {
@@ -132,23 +208,70 @@ class LiveTranslatorEnabler {
     } else {
       this._enabled = !this._enabled
     }
-    if (this.persist) {
+    if (this._options.persist) {
       localStorage.setItem('live-translator-enabled', JSON.stringify(this._enabled))
     }
+    console.log(`%c Live Translator ${this._enabled ? 'ON' : 'OFF'} `, 'background: #222; color: #bada55');
   }
-}
 
-export type TranslationMeta = {
-  locale: string,
-  message: string,
-  values: unknown,
-  path: string,
-}
+  render () {
+    const badges = document.querySelectorAll('.live-translator-badge')
+    badges.forEach((badge) => {
+      badge.remove()
+    })
 
-type LiveTranslatorPluginOptions = {
-  i18n: VueI18n
-  translationLink: (meta: TranslationMeta) => string
-  persist?: boolean
+    this._indicator.style.background = this._enabled ? 'lightgreen' : 'red'
+
+    if (!this._enabled) {
+      return
+    }
+
+    const re = new RegExp(ZeroWidthEncoder.PATTERN, 'gm')
+
+    const queue = [document.documentElement] as Node[]
+    while (queue.length > 0) {
+      const node = queue.pop() as HTMLElement
+
+      const badges = [] as HTMLElement[]
+      const parent = node.parentElement as Element
+
+      if (node instanceof Text) {
+        const matches = (node.textContent as string).match(re)
+        for (const match of matches ?? []) {
+          const meta = JSON.parse(ZeroWidthEncoder.decode(match)) as TranslationMeta
+          badges.push(createBadge(meta, this._options))
+        }
+      }
+
+      const attributes = (node.attributes ? [...node.attributes] : [])
+        .map((attribute) => ({ attribute, match: attribute.value.match(re) }))
+        .filter(({ match }) => !!match)
+      for (const { attribute, match } of attributes) {
+        for (const m of (match as RegExpMatchArray)) {
+          const meta = JSON.parse(ZeroWidthEncoder.decode(m)) as TranslationMeta
+          badges.push(createBadge(meta, this._options, attribute.name))
+        }
+      }
+
+      if (badges.length) {
+        let container: Element
+        if (node.previousElementSibling && node.previousElementSibling.classList.contains('live-translator-badge-container')) {
+          container = node.previousElementSibling
+        } else {
+          container = document.createElement('span')
+          container.classList.add('live-translator-badge-container')
+          parent.insertBefore(container, node)
+        }
+        for (const badge of badges) {
+          container.appendChild(badge)
+        }
+      }
+
+      for (const child of node.childNodes) {
+        queue.push(child)
+      }
+    }
+  }
 }
 
 const createBadge = (meta: TranslationMeta, options: LiveTranslatorPluginOptions, attribute?: string) => {
@@ -175,115 +298,6 @@ const createBadge = (meta: TranslationMeta, options: LiveTranslatorPluginOptions
 export const LiveTranslatorPlugin = {
   install (app: VueConstructor<Vue>, options: LiveTranslatorPluginOptions) {
     console.log('LiveTranslator is installed')
-    const zw = new ZeroWidthEncoder()
-    const ltEnabler = new LiveTranslatorEnabler(options.persist || false)
-
-    const enableButton = document.createElement('button')
-    enableButton.innerText = 'LT'
-    enableButton.classList.add('live-translator-enable-button')
-    const indicator = document.createElement('span')
-    indicator.classList.add('live-translator-enable-button-indicator')
-    enableButton.appendChild(indicator)
-    enableButton.addEventListener('click', () => {
-      ltEnabler.toggle()
-      visualize()
-      // Refresh translations to show immediately
-      const originalLocale = options.i18n.locale
-      options.i18n.locale = ''
-      options.i18n.locale = originalLocale
-    })
-    document.body.appendChild(enableButton)
-
-    const style = document.createElement('style')
-    style.id = 'live-translator-plugin-style'
-    style.innerHTML = css
-    document.head.appendChild(style)
-
-    const visualize = () => {
-      const badges = document.querySelectorAll('.live-translator-badge')
-      badges.forEach((badge) => {
-        badge.remove()
-      })
-
-      indicator.style.background = ltEnabler.enabled() ? 'lightgreen' : 'red'
-
-      if (!ltEnabler.enabled()) {
-        return
-      }
-
-      const re = new RegExp(`${zw.START}[${zw.ZERO}${zw.ONE}${zw.SPACE}]+${zw.END}`, 'gm')
-
-      const queue = [document.documentElement] as Node[]
-      while (queue.length > 0) {
-        const node = queue.pop() as HTMLElement
-
-        const badges = [] as HTMLElement[]
-        const parent = node.parentElement as Element
-
-        if (node instanceof Text) {
-          const matches = (node.textContent as string).match(re)
-          for (const match of matches ?? []) {
-            const meta = JSON.parse(zw.decode(match)) as TranslationMeta
-            badges.push(createBadge(meta, options))
-          }
-        }
-
-        const attributes = (node.attributes ? [...node.attributes] : [])
-          .map((attribute) => ({ attribute, match: attribute.value.match(re) }))
-          .filter(({ match }) => !!match)
-        for (const { attribute, match } of attributes) {
-          for (const m of (match as RegExpMatchArray)) {
-            const meta = JSON.parse(zw.decode(m)) as TranslationMeta
-            badges.push(createBadge(meta, options, attribute.name))
-          }
-        }
-
-        if (badges.length) {
-          let container
-          if (node.previousElementSibling && node.previousElementSibling.classList.contains('live-translator-badge-container')) {
-            container = node.previousElementSibling
-          } else {
-            container = document.createElement('span')
-            container.classList.add('live-translator-badge-container')
-            parent.insertBefore(container, node)
-          }
-          for (const badge of badges) {
-            container.appendChild(badge)
-          }
-        }
-
-        for (const child of node.childNodes) {
-          queue.push(child)
-        }
-      }
-    }
-
-    const originalFormatter = options.i18n.formatter
-    options.i18n.formatter = {
-      interpolate (message, values, path) {
-        const meta = zw.encode(
-          JSON.stringify({
-            message,
-            values,
-            path,
-            locale: options.i18n.locale,
-          }),
-        )
-        const original = originalFormatter.interpolate(message, values, path) as unknown[] | null
-        return (original && ltEnabler.enabled()) ? [meta, ...original] : original
-      },
-    }
-
-    const throttler = throttle(visualize, 800)
-    const observer = new MutationObserver(throttler)
-    observer.observe(document.documentElement,
-      {
-        subtree: true,
-        attributes: true,
-        characterData: true,
-        childList: false,
-      },
-    )
-    document.documentElement.addEventListener('mousemove', throttler)
+    new LiveTranslatorManager(options)
   },
 }
