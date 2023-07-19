@@ -186,7 +186,10 @@ export const LiveTranslatorPlugin = {
   install (app: VueConstructor<Vue>, options: LiveTranslatorPluginOptions) {
     console.log('LiveTranslator is installed')
 
-    // intantiate logic
+    // declare
+    const enableButton = document.createElement('button')
+    const indicator = document.createElement('span')
+
     const zw = new ZeroWidthEncoder()
     const visualize = () => {
       const badges = document.querySelectorAll('.live-translator-badge')
@@ -255,15 +258,11 @@ export const LiveTranslatorPlugin = {
     style.innerHTML = css
     document.head.appendChild(style)
 
-    const enableButton = document.createElement('button')
     enableButton.innerText = 'LT'
     enableButton.classList.add('live-translator-enable-button')
-    const indicator = document.createElement('span')
     indicator.classList.add('live-translator-enable-button-indicator')
     enableButton.appendChild(indicator)
-    enableButton.addEventListener('click', () => {
-      ltEnabler.toggle()
-    })
+    enableButton.addEventListener('click', () => ltEnabler.toggle())
     document.body.appendChild(enableButton)
 
     // encode meta to translation strings
