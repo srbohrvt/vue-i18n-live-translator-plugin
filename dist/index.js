@@ -139,13 +139,14 @@ class LiveTranslatorManager {
         document.body.appendChild(this._enableButton);
         // initialize encode
         const originalFormatter = this._options.i18n.formatter;
+        const self = this;
         this._options.i18n.formatter = {
             interpolate(message, values, path) {
                 const meta = ZeroWidthEncoder.encode(JSON.stringify({
                     message,
                     values,
                     path,
-                    locale: this._options.i18n.locale,
+                    locale: self._options.i18n.locale,
                 }));
                 const original = originalFormatter.interpolate(message, values, path);
                 return (original && this._enabled) ? [meta, ...original] : original;
