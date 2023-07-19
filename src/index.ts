@@ -68,14 +68,15 @@ type LiveTranslatorPluginOptions = {
   persist?: boolean
 }
 
-class ZeroWidthEncoder {
-  START = '\u200B'
-  ZERO = '\u200C'
-  ONE = '\u200D'
-  SPACE = '\u200E'
-  END = '\u200F'
+abstract class ZeroWidthEncoder {
+  static START = '\u200B'
+  static ZERO = '\u200C'
+  static ONE = '\u200D'
+  static SPACE = '\u200E'
+  static END = '\u200F'
+  static PATTERN = `${this.START}[${this.ZERO}${this.ONE}${this.SPACE}]+${this.END}`
 
-  encode (text: string) {
+  static encode (text: string) {
     const binary = text
       .split('')
       .map((char) => char.charCodeAt(0).toString(2))
@@ -96,7 +97,7 @@ class ZeroWidthEncoder {
     return this.START + zeroWidth + this.END
   }
 
-  decode (zeroWidth: string) {
+  static decode (zeroWidth: string) {
     const binary = zeroWidth
       .split('')
       .slice(1, zeroWidth.length - 1) // remove START and END
@@ -122,7 +123,6 @@ class LiveTranslatorManager {
   _enabled: boolean
   _options: LiveTranslatorPluginOptions
   _callback: CallableFunction
-  _zwEncoder: ZeroWidthEncoder
 
   _enableButton: HTMLButtonElement
   _indicator: HTMLSpanElement
@@ -130,7 +130,6 @@ class LiveTranslatorManager {
   constructor (options: LiveTranslatorPluginOptions) {
     this._enabled = false
     this._options = options
-    this._zwEncoder = new ZeroWidthEncoder()
 
     // handle persistance
     const savedRaw = localStorage.getItem('live-translator-enabled')
@@ -225,7 +224,7 @@ class LiveTranslatorManager {
       return
     }
 
-    const re = new RegExp(`${this._zwEncoder.START}[${this._zwEncoder.ZERO}${this._zwEncoder.ONE}${this._zwEncoder.SPACE}]+${this._zwEncoder.END}`, 'gm')
+    const re = new RegExp(ZeroWidthEncoder.PATTERN, 'gm')
 
     const queue = [document.documentElement] as Node[]
     while (queue.length > 0) {
@@ -237,7 +236,7 @@ class LiveTranslatorManager {
       if (node instanceof Text) {
         const matches = (node.textContent as string).match(re)
         for (const match of matches ?? []) {
-          const meta = JSON.parse(this._zwEncoder.decode(match)) as TranslationMeta
+          const meta = JSON.parse(ZeroWidthEncoder.decode(match)) as TranslationMeta
           badges.push(createBadge(meta, this._options))
         }
       }
@@ -247,7 +246,7 @@ class LiveTranslatorManager {
         .filter(({ match }) => !!match)
       for (const { attribute, match } of attributes) {
         for (const m of (match as RegExpMatchArray)) {
-          const meta = JSON.parse(this._zwEncoder.decode(m)) as TranslationMeta
+          const meta = JSON.parse(ZeroWidthEncoder.decode(m)) as TranslationMeta
           badges.push(createBadge(meta, this._options, attribute.name))
         }
       }

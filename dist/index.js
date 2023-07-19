@@ -2,6 +2,7 @@
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
+var _a;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.LiveTranslatorPlugin = void 0;
 const throttle_1 = __importDefault(require("lodash/throttle"));
@@ -59,14 +60,7 @@ const css = `
 }
 `;
 class ZeroWidthEncoder {
-    constructor() {
-        this.START = '\u200B';
-        this.ZERO = '\u200C';
-        this.ONE = '\u200D';
-        this.SPACE = '\u200E';
-        this.END = '\u200F';
-    }
-    encode(text) {
+    static encode(text) {
         const binary = text
             .split('')
             .map((char) => char.charCodeAt(0).toString(2))
@@ -86,7 +80,7 @@ class ZeroWidthEncoder {
             .join('');
         return this.START + zeroWidth + this.END;
     }
-    decode(zeroWidth) {
+    static decode(zeroWidth) {
         const binary = zeroWidth
             .split('')
             .slice(1, zeroWidth.length - 1) // remove START and END
@@ -107,11 +101,17 @@ class ZeroWidthEncoder {
         return text;
     }
 }
+_a = ZeroWidthEncoder;
+ZeroWidthEncoder.START = '\u200B';
+ZeroWidthEncoder.ZERO = '\u200C';
+ZeroWidthEncoder.ONE = '\u200D';
+ZeroWidthEncoder.SPACE = '\u200E';
+ZeroWidthEncoder.END = '\u200F';
+ZeroWidthEncoder.PATTERN = `${_a.START}[${_a.ZERO}${_a.ONE}${_a.SPACE}]+${_a.END}`;
 class LiveTranslatorManager {
     constructor(options) {
         this._enabled = false;
         this._options = options;
-        this._zwEncoder = new ZeroWidthEncoder();
         // handle persistance
         const savedRaw = localStorage.getItem('live-translator-enabled');
         if (this._options.persist && savedRaw) {
@@ -190,7 +190,7 @@ class LiveTranslatorManager {
         if (!this._enabled) {
             return;
         }
-        const re = new RegExp(`${this._zwEncoder.START}[${this._zwEncoder.ZERO}${this._zwEncoder.ONE}${this._zwEncoder.SPACE}]+${this._zwEncoder.END}`, 'gm');
+        const re = new RegExp(ZeroWidthEncoder.PATTERN, 'gm');
         const queue = [document.documentElement];
         while (queue.length > 0) {
             const node = queue.pop();
@@ -199,7 +199,7 @@ class LiveTranslatorManager {
             if (node instanceof Text) {
                 const matches = node.textContent.match(re);
                 for (const match of matches !== null && matches !== void 0 ? matches : []) {
-                    const meta = JSON.parse(this._zwEncoder.decode(match));
+                    const meta = JSON.parse(ZeroWidthEncoder.decode(match));
                     badges.push(createBadge(meta, this._options));
                 }
             }
@@ -208,7 +208,7 @@ class LiveTranslatorManager {
                 .filter(({ match }) => !!match);
             for (const { attribute, match } of attributes) {
                 for (const m of match) {
-                    const meta = JSON.parse(this._zwEncoder.decode(m));
+                    const meta = JSON.parse(ZeroWidthEncoder.decode(m));
                     badges.push(createBadge(meta, this._options, attribute.name));
                 }
             }
