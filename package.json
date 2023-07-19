@@ -19,7 +19,7 @@
     "url": "git+https://github.com/apicore-engineering/vue-i18n-live-translator-plugin.git"
   },
   "author": "Sebestyén Németh",
-  "license": "ISC",
+  "license": "MIT",
   "bugs": {
     "url": "https://github.com/apicore-engineering/vue-i18n-live-translator-plugin/issues"
   },
