@@ -201,6 +201,7 @@ export const LiveTranslatorPlugin = {
 
     const visualize = () => {
       const badges = document.querySelectorAll('.live-translator-badge')
+      console.log('clearing', badges.length, 'badges')
       badges.forEach((badge) => {
         badge.remove()
       })

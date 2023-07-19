@@ -181,6 +181,7 @@ exports.LiveTranslatorPlugin = {
         document.head.appendChild(style);
         const visualize = () => {
             const badges = document.querySelectorAll('.live-translator-badge');
+            console.log('clearing', badges.length, 'badges');
             badges.forEach((badge) => {
                 badge.remove();
             });
