@@ -174,7 +174,7 @@ class LiveTranslatorManager {
           }),
         )
         const original = originalFormatter.interpolate(message, values, path) as unknown[] | null
-        return (original && this._enabled) ? [meta, ...original] : original
+        return (original && self._enabled) ? [meta, ...original] : original
       },
     }
 

@@ -149,7 +149,7 @@ class LiveTranslatorManager {
                     locale: self._options.i18n.locale,
                 }));
                 const original = originalFormatter.interpolate(message, values, path);
-                return (original && this._enabled) ? [meta, ...original] : original;
+                return (original && self._enabled) ? [meta, ...original] : original;
             },
         };
         // initialize decode & render
