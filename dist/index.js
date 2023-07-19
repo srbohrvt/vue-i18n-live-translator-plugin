@@ -107,22 +107,68 @@ class ZeroWidthEncoder {
         return text;
     }
 }
-class LiveTranslatorEnabler {
-    constructor(options, callback) {
+class LiveTranslatorManager {
+    constructor(options) {
         this._enabled = false;
-        this._persist = options.persist || false;
         this._options = options;
-        this._callback = callback;
+        this._zwEncoder = new ZeroWidthEncoder();
+        // handle persistance
         const savedRaw = localStorage.getItem('live-translator-enabled');
-        if (this._persist && savedRaw) {
+        if (this._options.persist && savedRaw) {
             const saved = JSON.parse(savedRaw);
             if (typeof saved === 'boolean') {
                 this.toggle(saved);
             }
         }
+        // initialize UI
+        this._enableButton = document.createElement('button');
+        this._indicator = document.createElement('span');
+        const style = document.createElement('style');
+        style.id = 'live-translator-plugin-style';
+        style.innerHTML = css;
+        document.head.appendChild(style);
+        this._enableButton.innerText = 'LT';
+        this._enableButton.classList.add('live-translator-enable-button');
+        this._indicator.classList.add('live-translator-enable-button-indicator');
+        this._enableButton.appendChild(this._indicator);
+        this._enableButton.addEventListener('click', () => {
+            this.toggle();
+            this.refreshI18n();
+            this.render();
+        });
+        document.body.appendChild(this._enableButton);
+        // initialize encode
+        const originalFormatter = this._options.i18n.formatter;
+        this._options.i18n.formatter = {
+            interpolate(message, values, path) {
+                const meta = this._zwEncoder.encode(JSON.stringify({
+                    message,
+                    values,
+                    path,
+                    locale: this._options.i18n.locale,
+                }));
+                const original = originalFormatter.interpolate(message, values, path);
+                return (original && this._enabled) ? [meta, ...original] : original;
+            },
+        };
+        // initialize decode & render
+        const throttler = (0, throttle_1.default)(() => this.render(), 800);
+        const observer = new MutationObserver(throttler);
+        observer.observe(document.documentElement, {
+            subtree: true,
+            attributes: true,
+            characterData: true,
+            childList: false,
+        });
+        document.documentElement.addEventListener('mousemove', throttler);
+        // render for the first time
+        this.refreshI18n();
+        this.render();
     }
-    enabled() {
-        return this._enabled;
+    refreshI18n() {
+        const originalLocale = this._options.i18n.locale;
+        this._options.i18n.locale = '';
+        this._options.i18n.locale = originalLocale;
     }
     toggle(enable) {
         if (enable !== undefined) {
@@ -131,14 +177,59 @@ class LiveTranslatorEnabler {
         else {
             this._enabled = !this._enabled;
         }
-        if (this._persist) {
+        if (this._options.persist) {
             localStorage.setItem('live-translator-enabled', JSON.stringify(this._enabled));
         }
-        // Refresh translations to show immediately
-        const originalLocale = this._options.i18n.locale;
-        this._options.i18n.locale = '';
-        this._options.i18n.locale = originalLocale;
-        this._callback();
+    }
+    render() {
+        const badges = document.querySelectorAll('.live-translator-badge');
+        badges.forEach((badge) => {
+            badge.remove();
+        });
+        this._indicator.style.background = this._enabled ? 'lightgreen' : 'red';
+        if (!this._enabled) {
+            return;
+        }
+        const re = new RegExp(`${this._zwEncoder.START}[${this._zwEncoder.ZERO}${this._zwEncoder.ONE}${this._zwEncoder.SPACE}]+${this._zwEncoder.END}`, 'gm');
+        const queue = [document.documentElement];
+        while (queue.length > 0) {
+            const node = queue.pop();
+            const badges = [];
+            const parent = node.parentElement;
+            if (node instanceof Text) {
+                const matches = node.textContent.match(re);
+                for (const match of matches !== null && matches !== void 0 ? matches : []) {
+                    const meta = JSON.parse(this._zwEncoder.decode(match));
+                    badges.push(createBadge(meta, this._options));
+                }
+            }
+            const attributes = (node.attributes ? [...node.attributes] : [])
+                .map((attribute) => ({ attribute, match: attribute.value.match(re) }))
+                .filter(({ match }) => !!match);
+            for (const { attribute, match } of attributes) {
+                for (const m of match) {
+                    const meta = JSON.parse(this._zwEncoder.decode(m));
+                    badges.push(createBadge(meta, this._options, attribute.name));
+                }
+            }
+            if (badges.length) {
+                let container;
+                if (node.previousElementSibling && node.previousElementSibling.classList.contains('live-translator-badge-container')) {
+                    container = node.previousElementSibling;
+                }
+                else {
+                    container = document.createElement('span');
+                    container.classList.add('live-translator-badge-container');
+                    parent.insertBefore(container, node);
+                }
+                for (const badge of badges) {
+                    container.appendChild(badge);
+                }
+            }
+            for (const child of node.childNodes) {
+                queue.push(child);
+            }
+        }
     }
 }
 const createBadge = (meta, options, attribute) => {
@@ -165,96 +256,6 @@ const createBadge = (meta, options, attribute) => {
 exports.LiveTranslatorPlugin = {
     install(app, options) {
         console.log('LiveTranslator is installed');
-        // declare
-        const enableButton = document.createElement('button');
-        const indicator = document.createElement('span');
-        const zw = new ZeroWidthEncoder();
-        const visualize = () => {
-            const badges = document.querySelectorAll('.live-translator-badge');
-            console.log('clearing', badges.length, 'badges');
-            badges.forEach((badge) => {
-                badge.remove();
-            });
-            indicator.style.background = ltEnabler.enabled() ? 'lightgreen' : 'red';
-            if (!ltEnabler.enabled()) {
-                return;
-            }
-            const re = new RegExp(`${zw.START}[${zw.ZERO}${zw.ONE}${zw.SPACE}]+${zw.END}`, 'gm');
-            const queue = [document.documentElement];
-            while (queue.length > 0) {
-                const node = queue.pop();
-                const badges = [];
-                const parent = node.parentElement;
-                if (node instanceof Text) {
-                    const matches = node.textContent.match(re);
-                    for (const match of matches !== null && matches !== void 0 ? matches : []) {
-                        const meta = JSON.parse(zw.decode(match));
-                        badges.push(createBadge(meta, options));
-                    }
-                }
-                const attributes = (node.attributes ? [...node.attributes] : [])
-                    .map((attribute) => ({ attribute, match: attribute.value.match(re) }))
-                    .filter(({ match }) => !!match);
-                for (const { attribute, match } of attributes) {
-                    for (const m of match) {
-                        const meta = JSON.parse(zw.decode(m));
-                        badges.push(createBadge(meta, options, attribute.name));
-                    }
-                }
-                if (badges.length) {
-                    let container;
-                    if (node.previousElementSibling && node.previousElementSibling.classList.contains('live-translator-badge-container')) {
-                        container = node.previousElementSibling;
-                    }
-                    else {
-                        container = document.createElement('span');
-                        container.classList.add('live-translator-badge-container');
-                        parent.insertBefore(container, node);
-                    }
-                    for (const badge of badges) {
-                        container.appendChild(badge);
-                    }
-                }
-                for (const child of node.childNodes) {
-                    queue.push(child);
-                }
-            }
-        };
-        const ltEnabler = new LiveTranslatorEnabler(options, visualize);
-        // bind & style UI
-        const style = document.createElement('style');
-        style.id = 'live-translator-plugin-style';
-        style.innerHTML = css;
-        document.head.appendChild(style);
-        enableButton.innerText = 'LT';
-        enableButton.classList.add('live-translator-enable-button');
-        indicator.classList.add('live-translator-enable-button-indicator');
-        enableButton.appendChild(indicator);
-        enableButton.addEventListener('click', () => ltEnabler.toggle());
-        document.body.appendChild(enableButton);
-        // encode meta to translation strings
-        const originalFormatter = options.i18n.formatter;
-        options.i18n.formatter = {
-            interpolate(message, values, path) {
-                const meta = zw.encode(JSON.stringify({
-                    message,
-                    values,
-                    path,
-                    locale: options.i18n.locale,
-                }));
-                const original = originalFormatter.interpolate(message, values, path);
-                return (original && ltEnabler.enabled()) ? [meta, ...original] : original;
-            },
-        };
-        // decode & visualize meta
-        const throttler = (0, throttle_1.default)(visualize, 800);
-        const observer = new MutationObserver(throttler);
-        observer.observe(document.documentElement, {
-            subtree: true,
-            attributes: true,
-            characterData: true,
-            childList: false,
-        });
-        document.documentElement.addEventListener('mousemove', throttler);
+        new LiveTranslatorManager(options);
     },
 };
