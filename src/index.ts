@@ -1,4 +1,3 @@
-import Vue, { VueConstructor } from 'vue'
 import VueI18n from 'vue-i18n'
 import throttle from 'lodash/throttle'
 
@@ -296,7 +295,7 @@ const createBadge = (meta: TranslationMeta, options: LiveTranslatorPluginOptions
 }
 
 export const LiveTranslatorPlugin = {
-  install (app: VueConstructor<Vue>, options: LiveTranslatorPluginOptions) {
+  install (app: any, options: LiveTranslatorPluginOptions) {
     console.log('LiveTranslator is installed')
     new LiveTranslatorManager(options)
   },

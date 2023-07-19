@@ -26,12 +26,12 @@
   "homepage": "https://github.com/apicore-engineering/vue-i18n-live-translator-plugin#readme",
   "peerDependencies": {
     "lodash": "^4.17.21",
-    "typescript": "^5.1.6",
-    "vue": "^2.7.14",
+    "vue-demi": "^0.14.5",
     "vue-i18n": "^8.28.2"
   },
   "devDependencies": {
     "@types/lodash": "^4.14.195",
-    "husky": "^8.0.0"
+    "husky": "^8.0.0",
+    "typescript": "^5.1.6"
   }
 }
