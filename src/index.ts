@@ -211,6 +211,7 @@ class LiveTranslatorManager {
     if (this._options.persist) {
       localStorage.setItem('live-translator-enabled', JSON.stringify(this._enabled))
     }
+    console.log(`%c Live Translator ${this._enabled ? 'ON' : 'OFF'} `, 'background: #222; color: #bada55');
   }
 
   render () {
