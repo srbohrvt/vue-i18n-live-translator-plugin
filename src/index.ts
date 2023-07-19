@@ -108,13 +108,17 @@ class ZeroWidthEncoder {
 
 class LiveTranslatorEnabler {
   _enabled: boolean
-  persist: boolean
+  _persist: boolean
+  _options: LiveTranslatorPluginOptions
+  _callback: CallableFunction
 
-  constructor (persist: boolean) {
+  constructor (options: LiveTranslatorPluginOptions, callback: CallableFunction) {
     this._enabled = false
-    this.persist = persist
+    this._persist = options.persist || false
+    this._options = options
+    this._callback = callback
     const savedRaw = localStorage.getItem('live-translator-enabled')
-    if (persist && savedRaw) {
+    if (this._persist && savedRaw) {
       const saved = JSON.parse(savedRaw)
       if (typeof saved === 'boolean') {
         this.toggle(saved)
@@ -132,9 +136,15 @@ class LiveTranslatorEnabler {
     } else {
       this._enabled = !this._enabled
     }
-    if (this.persist) {
+    if (this._persist) {
       localStorage.setItem('live-translator-enabled', JSON.stringify(this._enabled))
     }
+    // Refresh translations to show immediately
+    const originalLocale = this._options.i18n.locale
+    this._options.i18n.locale = ''
+    this._options.i18n.locale = originalLocale
+
+    this._callback()
   }
 }
 
@@ -175,30 +185,9 @@ const createBadge = (meta: TranslationMeta, options: LiveTranslatorPluginOptions
 export const LiveTranslatorPlugin = {
   install (app: VueConstructor<Vue>, options: LiveTranslatorPluginOptions) {
     console.log('LiveTranslator is installed')
+
+    // intantiate logic
     const zw = new ZeroWidthEncoder()
-    const ltEnabler = new LiveTranslatorEnabler(options.persist || false)
-
-    const enableButton = document.createElement('button')
-    enableButton.innerText = 'LT'
-    enableButton.classList.add('live-translator-enable-button')
-    const indicator = document.createElement('span')
-    indicator.classList.add('live-translator-enable-button-indicator')
-    enableButton.appendChild(indicator)
-    enableButton.addEventListener('click', () => {
-      ltEnabler.toggle()
-      visualize()
-      // Refresh translations to show immediately
-      const originalLocale = options.i18n.locale
-      options.i18n.locale = ''
-      options.i18n.locale = originalLocale
-    })
-    document.body.appendChild(enableButton)
-
-    const style = document.createElement('style')
-    style.id = 'live-translator-plugin-style'
-    style.innerHTML = css
-    document.head.appendChild(style)
-
     const visualize = () => {
       const badges = document.querySelectorAll('.live-translator-badge')
       console.log('clearing', badges.length, 'badges')
@@ -258,7 +247,26 @@ export const LiveTranslatorPlugin = {
         }
       }
     }
+    const ltEnabler = new LiveTranslatorEnabler(options, visualize)
 
+    // bind & style UI
+    const style = document.createElement('style')
+    style.id = 'live-translator-plugin-style'
+    style.innerHTML = css
+    document.head.appendChild(style)
+
+    const enableButton = document.createElement('button')
+    enableButton.innerText = 'LT'
+    enableButton.classList.add('live-translator-enable-button')
+    const indicator = document.createElement('span')
+    indicator.classList.add('live-translator-enable-button-indicator')
+    enableButton.appendChild(indicator)
+    enableButton.addEventListener('click', () => {
+      ltEnabler.toggle()
+    })
+    document.body.appendChild(enableButton)
+
+    // encode meta to translation strings
     const originalFormatter = options.i18n.formatter
     options.i18n.formatter = {
       interpolate (message, values, path) {
@@ -275,6 +283,7 @@ export const LiveTranslatorPlugin = {
       },
     }
 
+    // decode & visualize meta
     const throttler = throttle(visualize, 800)
     const observer = new MutationObserver(throttler)
     observer.observe(document.documentElement,
