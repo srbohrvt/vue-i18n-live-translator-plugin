@@ -164,7 +164,7 @@ class LiveTranslatorManager {
     const originalFormatter = this._options.i18n.formatter
     this._options.i18n.formatter = {
       interpolate (message, values, path) {
-        const meta = this._zwEncoder.encode(
+        const meta = ZeroWidthEncoder.encode(
           JSON.stringify({
             message,
             values,
