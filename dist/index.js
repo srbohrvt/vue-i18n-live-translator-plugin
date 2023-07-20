@@ -189,9 +189,9 @@ class LiveTranslatorManager {
         console.log(`%c Live Translator ${this._enabled ? 'ON' : 'OFF'} `, 'background: #222; color: #bada55');
     }
     render() {
-        const badges = document.querySelectorAll('.live-translator-badge');
-        badges.forEach((badge) => {
-            badge.remove();
+        const badgeWrappers = document.querySelectorAll('.live-translator-badge-wrapper');
+        badgeWrappers.forEach((wrapper) => {
+            wrapper.remove();
         });
         this._indicator.style.background = this._enabled ? 'lightgreen' : 'red';
         if (!this._enabled) {
