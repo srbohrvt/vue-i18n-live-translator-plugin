@@ -29,6 +29,11 @@ const css = `
   border-radius: 100%;
   background-color: red;
 }
+.live-translator-badge-wrapper {
+  position: relative !important;
+  width: 0px;
+  height: 0px;
+}
 .live-translator-badge-container {
   position: absolute !important;
   display: flex;
@@ -222,7 +227,10 @@ class LiveTranslatorManager {
                 else {
                     container = document.createElement('span');
                     container.classList.add('live-translator-badge-container');
-                    parent.insertBefore(container, node);
+                    const relativeWrapper = document.createElement('span');
+                    relativeWrapper.classList.add('live-translator-badge-wrapper');
+                    relativeWrapper.appendChild(container);
+                    parent.insertBefore(relativeWrapper, node);
                 }
                 for (const badge of badges) {
                     container.appendChild(badge);
