@@ -168,16 +168,22 @@ class LiveTranslatorManager {
     const self = this
     this._options.i18n.formatter = {
       interpolate (message, values, path) {
-        const meta = ZeroWidthEncoder.encode(
-          JSON.stringify({
-            message,
-            values,
-            path,
-            locale: self._options.i18n.locale,
-          }),
-        )
         const original = originalFormatter.interpolate(message, values, path) as unknown[] | null
-        return (original && self._enabled) ? [meta, ...original] : original
+        let meta = ''
+        try {
+          meta = ZeroWidthEncoder.encode(
+            JSON.stringify({
+              message,
+              values,
+              path,
+              locale: self._options.i18n.locale,
+            }),
+          )
+        } catch (exception) {
+          console.warn(path, exception)
+        }
+
+        return (original && meta && self._enabled) ? [meta, ...original] : original
       },
     }
 
