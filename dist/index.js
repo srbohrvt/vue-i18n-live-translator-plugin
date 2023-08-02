@@ -157,7 +157,6 @@ class LiveTranslatorManager {
                         path,
                         locale: self._options.i18n.locale,
                     }));
-                    console.log(values);
                 }
                 catch (exception) {
                     console.warn(message, values, path, self._options.i18n.locale, exception);
