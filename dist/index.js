@@ -154,7 +154,7 @@ class LiveTranslatorManager {
                     }));
                 }
                 catch (exception) {
-                    console.warn(path, exception);
+                    console.warn(message, values, path, self._options.i18n.locale, exception);
                 }
                 return (original && meta && self._enabled) ? [meta, ...original] : original;
             },
