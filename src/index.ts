@@ -1,4 +1,3 @@
-import Vue, { VueConstructor } from 'vue'
 import VueI18n from 'vue-i18n'
 import throttle from 'lodash/throttle'
 
@@ -24,6 +23,11 @@ const css = `
   margin-left: 2px;
   border-radius: 100%;
   background-color: red;
+}
+.live-translator-badge-wrapper {
+  position: relative !important;
+  width: 0px;
+  height: 0px;
 }
 .live-translator-badge-container {
   position: absolute !important;
@@ -122,7 +126,6 @@ abstract class ZeroWidthEncoder {
 class LiveTranslatorManager {
   _enabled: boolean
   _options: LiveTranslatorPluginOptions
-  _callback: CallableFunction
 
   _enableButton: HTMLButtonElement
   _indicator: HTMLSpanElement
@@ -165,16 +168,22 @@ class LiveTranslatorManager {
     const self = this
     this._options.i18n.formatter = {
       interpolate (message, values, path) {
-        const meta = ZeroWidthEncoder.encode(
-          JSON.stringify({
-            message,
-            values,
-            path,
-            locale: self._options.i18n.locale,
-          }),
-        )
         const original = originalFormatter.interpolate(message, values, path) as unknown[] | null
-        return (original && self._enabled) ? [meta, ...original] : original
+        let meta = ''
+        try {
+          meta = ZeroWidthEncoder.encode(
+            JSON.stringify({
+              message,
+              values,
+              path,
+              locale: self._options.i18n.locale,
+            }),
+          )
+        } catch (exception) {
+          console.warn(path, exception)
+        }
+
+        return (original && meta && self._enabled) ? [meta, ...original] : original
       },
     }
 
@@ -215,9 +224,9 @@ class LiveTranslatorManager {
   }
 
   render () {
-    const badges = document.querySelectorAll('.live-translator-badge')
-    badges.forEach((badge) => {
-      badge.remove()
+    const badgeWrappers = document.querySelectorAll('.live-translator-badge-wrapper')
+    badgeWrappers.forEach((wrapper) => {
+      wrapper.remove()
     })
 
     this._indicator.style.background = this._enabled ? 'lightgreen' : 'red'
@@ -260,7 +269,10 @@ class LiveTranslatorManager {
         } else {
           container = document.createElement('span')
           container.classList.add('live-translator-badge-container')
-          parent.insertBefore(container, node)
+          const relativeWrapper = document.createElement('span')
+          relativeWrapper.classList.add('live-translator-badge-wrapper')
+          relativeWrapper.appendChild(container)
+          parent.insertBefore(relativeWrapper, node)
         }
         for (const badge of badges) {
           container.appendChild(badge)
@@ -296,7 +308,7 @@ const createBadge = (meta: TranslationMeta, options: LiveTranslatorPluginOptions
 }
 
 export const LiveTranslatorPlugin = {
-  install (app: VueConstructor<Vue>, options: LiveTranslatorPluginOptions) {
+  install (app: any, options: LiveTranslatorPluginOptions) {
     console.log('LiveTranslator is installed')
     new LiveTranslatorManager(options)
   },

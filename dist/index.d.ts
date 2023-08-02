@@ -1,4 +1,3 @@
-import Vue, { VueConstructor } from 'vue';
 import VueI18n from 'vue-i18n';
 export type TranslationMeta = {
     locale: string;
@@ -12,6 +11,6 @@ type LiveTranslatorPluginOptions = {
     persist?: boolean;
 };
 export declare const LiveTranslatorPlugin: {
-    install(app: VueConstructor<Vue>, options: LiveTranslatorPluginOptions): void;
+    install(app: any, options: LiveTranslatorPluginOptions): void;
 };
 export {};

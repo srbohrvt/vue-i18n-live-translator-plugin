@@ -24,3 +24,17 @@ translationLink (meta: TranslationMeta) {
     return `<weblate_url>/translate/<project>/<component>/${meta.locale}/?q=context:=${meta.path}`
 }
 ```
+
+## Develop
+```bash
+git clone https://github.com/apicore-engineering/vue-i18n-live-translator-plugin
+```
+```bash
+cd vue-i18n-live-translator-plugin
+```
+```bash
+npm install
+```
+```bash
+husky install
+```

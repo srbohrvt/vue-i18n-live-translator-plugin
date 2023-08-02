@@ -1,11 +1,4 @@
-"use strict";
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
-var _a;
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.LiveTranslatorPlugin = void 0;
-const throttle_1 = __importDefault(require("lodash/throttle"));
+import throttle from 'lodash/throttle';
 const css = `
 .live-translator-enable-button {
   position: fixed !important;
@@ -28,6 +21,11 @@ const css = `
   margin-left: 2px;
   border-radius: 100%;
   background-color: red;
+}
+.live-translator-badge-wrapper {
+  position: relative !important;
+  width: 0px;
+  height: 0px;
 }
 .live-translator-badge-container {
   position: absolute !important;
@@ -60,6 +58,12 @@ const css = `
 }
 `;
 class ZeroWidthEncoder {
+    static START = '\u200B';
+    static ZERO = '\u200C';
+    static ONE = '\u200D';
+    static SPACE = '\u200E';
+    static END = '\u200F';
+    static PATTERN = `${this.START}[${this.ZERO}${this.ONE}${this.SPACE}]+${this.END}`;
     static encode(text) {
         const binary = text
             .split('')
@@ -101,14 +105,11 @@ class ZeroWidthEncoder {
         return text;
     }
 }
-_a = ZeroWidthEncoder;
-ZeroWidthEncoder.START = '\u200B';
-ZeroWidthEncoder.ZERO = '\u200C';
-ZeroWidthEncoder.ONE = '\u200D';
-ZeroWidthEncoder.SPACE = '\u200E';
-ZeroWidthEncoder.END = '\u200F';
-ZeroWidthEncoder.PATTERN = `${_a.START}[${_a.ZERO}${_a.ONE}${_a.SPACE}]+${_a.END}`;
 class LiveTranslatorManager {
+    _enabled;
+    _options;
+    _enableButton;
+    _indicator;
     constructor(options) {
         this._enabled = false;
         this._options = options;
@@ -142,18 +143,24 @@ class LiveTranslatorManager {
         const self = this;
         this._options.i18n.formatter = {
             interpolate(message, values, path) {
-                const meta = ZeroWidthEncoder.encode(JSON.stringify({
-                    message,
-                    values,
-                    path,
-                    locale: self._options.i18n.locale,
-                }));
                 const original = originalFormatter.interpolate(message, values, path);
-                return (original && self._enabled) ? [meta, ...original] : original;
+                let meta = '';
+                try {
+                    meta = ZeroWidthEncoder.encode(JSON.stringify({
+                        message,
+                        values,
+                        path,
+                        locale: self._options.i18n.locale,
+                    }));
+                }
+                catch (exception) {
+                    console.warn(path, exception);
+                }
+                return (original && meta && self._enabled) ? [meta, ...original] : original;
             },
         };
         // initialize decode & render
-        const throttler = (0, throttle_1.default)(() => this.render(), 800);
+        const throttler = throttle(() => this.render(), 800);
         const observer = new MutationObserver(throttler);
         observer.observe(document.documentElement, {
             subtree: true,
@@ -184,9 +191,9 @@ class LiveTranslatorManager {
         console.log(`%c Live Translator ${this._enabled ? 'ON' : 'OFF'} `, 'background: #222; color: #bada55');
     }
     render() {
-        const badges = document.querySelectorAll('.live-translator-badge');
-        badges.forEach((badge) => {
-            badge.remove();
+        const badgeWrappers = document.querySelectorAll('.live-translator-badge-wrapper');
+        badgeWrappers.forEach((wrapper) => {
+            wrapper.remove();
         });
         this._indicator.style.background = this._enabled ? 'lightgreen' : 'red';
         if (!this._enabled) {
@@ -200,7 +207,7 @@ class LiveTranslatorManager {
             const parent = node.parentElement;
             if (node instanceof Text) {
                 const matches = node.textContent.match(re);
-                for (const match of matches !== null && matches !== void 0 ? matches : []) {
+                for (const match of matches ?? []) {
                     const meta = JSON.parse(ZeroWidthEncoder.decode(match));
                     badges.push(createBadge(meta, this._options));
                 }
@@ -222,7 +229,10 @@ class LiveTranslatorManager {
                 else {
                     container = document.createElement('span');
                     container.classList.add('live-translator-badge-container');
-                    parent.insertBefore(container, node);
+                    const relativeWrapper = document.createElement('span');
+                    relativeWrapper.classList.add('live-translator-badge-wrapper');
+                    relativeWrapper.appendChild(container);
+                    parent.insertBefore(relativeWrapper, node);
                 }
                 for (const badge of badges) {
                     container.appendChild(badge);
@@ -255,7 +265,7 @@ const createBadge = (meta, options, attribute) => {
     });
     return badge;
 };
-exports.LiveTranslatorPlugin = {
+export const LiveTranslatorPlugin = {
     install(app, options) {
         console.log('LiveTranslator is installed');
         new LiveTranslatorManager(options);
