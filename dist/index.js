@@ -1,5 +1,5 @@
 import throttle from 'lodash/throttle';
-import JSON from 'json-cycle';
+// import JSON from 'json-cycle'
 const css = `
 .live-translator-enable-button {
   position: fixed !important;
