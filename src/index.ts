@@ -63,7 +63,7 @@ const css = `
 export type TranslationMeta = {
   locale: string,
   message: string,
-  values: unknown,
+  values?: object,
   path: string,
 }
 
@@ -172,15 +172,16 @@ class LiveTranslatorManager {
         const original = originalFormatter.interpolate(message, values, path) as unknown[] | null
         let meta = ''
         try {
+          const hasNestedValues =
+            !!values && Object.values(values).some(v => typeof v === 'object')
           meta = ZeroWidthEncoder.encode(
             JSON.stringify({
               message,
-              values,
+              values: !hasNestedValues ? values : null,
               path,
               locale: self._options.i18n.locale,
-            }),
+            } as TranslationMeta),
           )
-          console.warn(values)
         } catch (exception) {
           console.warn(message, values, path, self._options.i18n.locale, exception)
         }

@@ -147,13 +147,13 @@ class LiveTranslatorManager {
                 const original = originalFormatter.interpolate(message, values, path);
                 let meta = '';
                 try {
+                    const hasNestedValues = !!values && Object.values(values).some(v => typeof v === 'object');
                     meta = ZeroWidthEncoder.encode(JSON.stringify({
                         message,
-                        values,
+                        values: !hasNestedValues ? values : null,
                         path,
                         locale: self._options.i18n.locale,
                     }));
-                    console.warn(values);
                 }
                 catch (exception) {
                     console.warn(message, values, path, self._options.i18n.locale, exception);

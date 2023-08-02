@@ -2,7 +2,7 @@ import VueI18n from 'vue-i18n';
 export type TranslationMeta = {
     locale: string;
     message: string;
-    values: unknown;
+    values?: object;
     path: string;
 };
 type LiveTranslatorPluginOptions = {
