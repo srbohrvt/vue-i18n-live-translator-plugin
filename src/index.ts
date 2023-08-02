@@ -168,20 +168,25 @@ class LiveTranslatorManager {
     const originalFormatter = this._options.i18n.formatter
     const self = this
     this._options.i18n.formatter = {
-      interpolate (message, values, path) {
+      interpolate (message: string, values: object | null, path: string) {
         const original = originalFormatter.interpolate(message, values, path) as unknown[] | null
         let meta = ''
         try {
-          const hasNestedValues =
-            !!values && Object.values(values).some(v => typeof v === 'object')
+          // filter nested objects, replace inner objects with string 'object'
+          // this is needed when values from <i18n> tags are circular dependent objects
+          const filteredValues = Object.fromEntries(
+            Object.entries(values || {})
+              .map(([key, value]) => [key, typeof value !== 'object' ? value : 'object'])
+          )
           meta = ZeroWidthEncoder.encode(
             JSON.stringify({
               message,
-              values: !hasNestedValues ? values : null,
+              values: filteredValues,
               path,
               locale: self._options.i18n.locale,
             } as TranslationMeta),
           )
+          console.log(values)
         } catch (exception) {
           console.warn(message, values, path, self._options.i18n.locale, exception)
         }
