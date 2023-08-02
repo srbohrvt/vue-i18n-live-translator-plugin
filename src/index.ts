@@ -1,6 +1,5 @@
 import VueI18n from 'vue-i18n'
 import throttle from 'lodash/throttle'
-// import JSON from 'json-cycle'
 
 const css = `
 .live-translator-enable-button {
