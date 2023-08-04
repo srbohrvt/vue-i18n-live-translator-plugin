@@ -146,15 +146,19 @@ class LiveTranslatorManager {
                 const original = originalFormatter.interpolate(message, values, path);
                 let meta = '';
                 try {
+                    // filter nested objects, replace inner objects with string 'object'
+                    // this is needed when values from <i18n> tags are circular dependent objects
+                    const filteredValues = Object.fromEntries(Object.entries(values || {})
+                        .map(([key, value]) => [key, typeof value !== 'object' ? value : 'object']));
                     meta = ZeroWidthEncoder.encode(JSON.stringify({
                         message,
-                        values,
+                        values: filteredValues,
                         path,
                         locale: self._options.i18n.locale,
                     }));
                 }
                 catch (exception) {
-                    console.warn(path, exception);
+                    console.warn(message, values, path, self._options.i18n.locale, exception);
                 }
                 return (original && meta && self._enabled) ? [meta, ...original] : original;
             },

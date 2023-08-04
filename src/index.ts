@@ -62,7 +62,7 @@ const css = `
 export type TranslationMeta = {
   locale: string,
   message: string,
-  values: unknown,
+  values?: object,
   path: string,
 }
 
@@ -167,20 +167,26 @@ class LiveTranslatorManager {
     const originalFormatter = this._options.i18n.formatter
     const self = this
     this._options.i18n.formatter = {
-      interpolate (message, values, path) {
+      interpolate (message: string, values: object | null, path: string) {
         const original = originalFormatter.interpolate(message, values, path) as unknown[] | null
         let meta = ''
         try {
+          // filter nested objects, replace inner objects with string 'object'
+          // this is needed when values from <i18n> tags are circular dependent objects
+          const filteredValues = Object.fromEntries(
+            Object.entries(values || {})
+              .map(([key, value]) => [key, typeof value !== 'object' ? value : 'object'])
+          )
           meta = ZeroWidthEncoder.encode(
             JSON.stringify({
               message,
-              values,
+              values: filteredValues,
               path,
               locale: self._options.i18n.locale,
-            }),
+            } as TranslationMeta),
           )
         } catch (exception) {
-          console.warn(path, exception)
+          console.warn(message, values, path, self._options.i18n.locale, exception)
         }
 
         return (original && meta && self._enabled) ? [meta, ...original] : original
