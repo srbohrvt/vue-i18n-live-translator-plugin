@@ -1,86 +1,18 @@
+import Vue, { VueConstructor } from 'vue'
 import VueI18n from 'vue-i18n'
-import throttle from 'lodash/throttle'
+import _ from 'lodash'
+import { v4 as uuidv4 } from 'uuid'
+import * as htmlToImage from 'html-to-image'
+import { flatten } from 'flat'
 
-const css = `
-.live-translator-enable-button {
-  position: fixed !important;
-  top: 0;
-  left: 0;
-  z-index: 10000;
-  padding: 2px;
-  color: black;
-  background: rgba(255, 255, 255, 0.6);
-  font-family: sans-serif;
-  font-size: 8px;
-}
-.live-translator-enable-button:hover {
-  background: white;
-}
-.live-translator-enable-button-indicator {
-  display: inline-block;
-  height: 6px;
-  width: 6px;
-  margin-left: 2px;
-  border-radius: 100%;
-  background-color: red;
-}
-.live-translator-badge-wrapper {
-  position: relative !important;
-  width: 0px;
-  height: 0px;
-}
-.live-translator-badge-container {
-  position: absolute !important;
-  display: flex;
-  z-index: 10000;
-}
-.live-translator-badge {
-  width: 10px !important;
-  height: 10px !important;
-  border-radius: 10px !important;
-  box-shadow: 0px 0px 5px black !important;
-  opacity: 0.5 !important;
-}
-.live-translator-badge:hover {
-  opacity: 1 !important;
-}
-.live-translator-badge.text {
-  background: green !important;
-}
-.live-translator-badge.text:hover {
-  background: lightgreen !important;
-  box-shadow: 0px 0px 5px lightgreen !important;
-}
-.live-translator-badge.attribute {
-  background: blue !important;
-}
-.live-translator-badge.attribute:hover {
-  background: #00c0ff !important;
-  box-shadow: 0px 0px 5px #00c0ff !important;
-}
-`
-export type TranslationMeta = {
-  locale: string,
-  message: string,
-  values?: object,
-  path: string,
-}
+class ZeroWidthEncoder {
+  START = '\u200B'
+  ZERO = '\u200C'
+  ONE = '\u200D'
+  SPACE = '\u200E'
+  END = '\u200F'
 
-type LiveTranslatorPluginOptions = {
-  i18n: VueI18n
-  translationLink: (meta: TranslationMeta) => string
-  persist?: boolean
-}
-
-abstract class ZeroWidthEncoder {
-  static START = '\u200B'
-  static ZERO = '\u200C'
-  static ONE = '\u200D'
-  static SPACE = '\u200E'
-  static END = '\u200F'
-  static PATTERN = `${this.START}[${this.ZERO}${this.ONE}${this.SPACE}]+${this.END}`
-
-  static encode (text: string) {
+  encode (text: string) {
     const binary = text
       .split('')
       .map((char) => char.charCodeAt(0).toString(2))
@@ -101,7 +33,7 @@ abstract class ZeroWidthEncoder {
     return this.START + zeroWidth + this.END
   }
 
-  static decode (zeroWidth: string) {
+  decode (zeroWidth: string) {
     const binary = zeroWidth
       .split('')
       .slice(1, zeroWidth.length - 1) // remove START and END
@@ -123,185 +55,27 @@ abstract class ZeroWidthEncoder {
   }
 }
 
-class LiveTranslatorManager {
-  _enabled: boolean
-  _options: LiveTranslatorPluginOptions
-
-  _enableButton: HTMLButtonElement
-  _indicator: HTMLSpanElement
-
-  constructor (options: LiveTranslatorPluginOptions) {
-    this._enabled = false
-    this._options = options
-
-    // handle persistance
-    const savedRaw = localStorage.getItem('live-translator-enabled')
-    if (this._options.persist && savedRaw) {
-      const saved = JSON.parse(savedRaw)
-      if (typeof saved === 'boolean') {
-        this.toggle(saved)
-      }
-    }
-
-    // initialize UI
-    this._enableButton = document.createElement('button')
-    this._indicator = document.createElement('span')
-    const style = document.createElement('style')
-
-    style.id = 'live-translator-plugin-style'
-    style.innerHTML = css
-    document.head.appendChild(style)
-
-    this._enableButton.innerText = 'LT'
-    this._enableButton.classList.add('live-translator-enable-button')
-    this._indicator.classList.add('live-translator-enable-button-indicator')
-    this._enableButton.appendChild(this._indicator)
-    this._enableButton.addEventListener('click', () => {
-      this.toggle()
-      this.refreshI18n()
-      this.render()
-    })
-    document.body.appendChild(this._enableButton)
-
-    // initialize encode
-    const originalFormatter = this._options.i18n.formatter
-    const self = this
-    this._options.i18n.formatter = {
-      interpolate (message: string, values: object | null, path: string) {
-        const original = originalFormatter.interpolate(message, values, path) as unknown[] | null
-        let meta = ''
-        try {
-          // filter nested objects, replace inner objects with string 'object'
-          // this is needed when values from <i18n> tags are circular dependent objects
-          const filteredValues = Object.fromEntries(
-            Object.entries(values || {})
-              .map(([key, value]) => [key, typeof value !== 'object' ? value : 'object'])
-          )
-          meta = ZeroWidthEncoder.encode(
-            JSON.stringify({
-              message,
-              values: filteredValues,
-              path,
-              locale: self._options.i18n.locale,
-            } as TranslationMeta),
-          )
-        } catch (exception) {
-          console.warn(message, values, path, self._options.i18n.locale, exception)
-        }
-
-        return (original && meta && self._enabled) ? [meta, ...original] : original
-      },
-    }
-
-    // initialize decode & render
-    const throttler = throttle(() => this.render(), 800)
-    const observer = new MutationObserver(throttler)
-    observer.observe(document.documentElement,
-      {
-        subtree: true,
-        attributes: true,
-        characterData: true,
-        childList: false,
-      },
-    )
-    document.documentElement.addEventListener('mousemove', throttler)
-
-    // render for the first time
-    this.refreshI18n()
-    this.render()
-  }
-
-  refreshI18n () {
-    const originalLocale = this._options.i18n.locale
-    this._options.i18n.locale = ''
-    this._options.i18n.locale = originalLocale
-  }
-
-  toggle (enable?: boolean) {
-    if (enable !== undefined) {
-      this._enabled = enable
-    } else {
-      this._enabled = !this._enabled
-    }
-    if (this._options.persist) {
-      localStorage.setItem('live-translator-enabled', JSON.stringify(this._enabled))
-    }
-    console.log(`%c Live Translator ${this._enabled ? 'ON' : 'OFF'} `, 'background: #222; color: #bada55');
-  }
-
-  render () {
-    const badgeWrappers = document.querySelectorAll('.live-translator-badge-wrapper')
-    badgeWrappers.forEach((wrapper) => {
-      wrapper.remove()
-    })
-
-    this._indicator.style.background = this._enabled ? 'lightgreen' : 'red'
-
-    if (!this._enabled) {
-      return
-    }
-
-    const re = new RegExp(ZeroWidthEncoder.PATTERN, 'gm')
-
-    const queue = [document.documentElement] as Node[]
-    while (queue.length > 0) {
-      const node = queue.pop() as HTMLElement
-
-      const badges = [] as HTMLElement[]
-      const parent = node.parentElement as Element
-
-      if (node instanceof Text) {
-        const matches = (node.textContent as string).match(re)
-        for (const match of matches ?? []) {
-          const meta = JSON.parse(ZeroWidthEncoder.decode(match)) as TranslationMeta
-          badges.push(createBadge(meta, this._options))
-        }
-      }
-
-      const attributes = (node.attributes ? [...node.attributes] : [])
-        .map((attribute) => ({ attribute, match: attribute.value.match(re) }))
-        .filter(({ match }) => !!match)
-      for (const { attribute, match } of attributes) {
-        for (const m of (match as RegExpMatchArray)) {
-          const meta = JSON.parse(ZeroWidthEncoder.decode(m)) as TranslationMeta
-          badges.push(createBadge(meta, this._options, attribute.name))
-        }
-      }
-
-      if (badges.length) {
-        let container: Element
-        if (node.previousElementSibling && node.previousElementSibling.classList.contains('live-translator-badge-container')) {
-          container = node.previousElementSibling
-        } else {
-          container = document.createElement('span')
-          container.classList.add('live-translator-badge-container')
-          const relativeWrapper = document.createElement('span')
-          relativeWrapper.classList.add('live-translator-badge-wrapper')
-          relativeWrapper.appendChild(container)
-          parent.insertBefore(relativeWrapper, node)
-        }
-        for (const badge of badges) {
-          container.appendChild(badge)
-        }
-      }
-
-      for (const child of node.childNodes) {
-        queue.push(child)
-      }
-    }
-  }
+export type TranslationMeta = {
+  locale: string,
+  message: string,
+  values: any,
+  path: string,
+  uuid: string,
 }
 
-const createBadge = (meta: TranslationMeta, options: LiveTranslatorPluginOptions, attribute?: string) => {
+type LiveTranslatorPluginOptions = {
+  i18n: VueI18n
+  translationLink: (meta: TranslationMeta) => string
+}
+
+const createBadge = (meta: TranslationMeta, options: LiveTranslatorPluginOptions, prefix?: string) => {
   const badge = document.createElement('a')
   badge.classList.add('live-translator-badge')
   let title = meta.path + ': ' + meta.message
-  if (attribute) {
-    title = `[${attribute}] ${title}`
-    badge.classList.add('attribute')
-  } else {
-    badge.classList.add('text')
+  if (prefix) {
+    title = `[${prefix}] ${title}`
   }
+  badge.id = meta.uuid
   badge.title = title
   badge.href = options.translationLink(meta)
   badge.target = 'popup'
@@ -313,9 +87,166 @@ const createBadge = (meta: TranslationMeta, options: LiveTranslatorPluginOptions
   return badge
 }
 
+const createBox = (node: HTMLElement, attribute = false) => {
+  const box = node.getBoundingClientRect()
+  const div = document.createElement('div')
+  div.classList.add('live-translator-box')
+  div.style.position = 'fixed'
+  div.style.top = box.top - 5 + 'px'
+  div.style.left = box.left - 5 + 'px'
+  div.style.width = box.width + 10 + 'px'
+  div.style.height = box.height + 10 + 'px'
+  div.style.border = 'solid 2px ' + (attribute ? 'blue' : 'red')
+  div.style.zIndex = '10000'
+  div.style.borderRadius = '5px'
+  return div
+}
+
+const capture = async (node: HTMLElement = document.getElementById('app') as HTMLElement) => {
+  const dataUrl = await htmlToImage.toJpeg(node, { quality: 0.5 })
+  const link = document.createElement('a')
+  link.download = 'capture.jpeg'
+  link.href = dataUrl
+  link.click()
+
+  // const blob = await htmlToImage.toBlob(node, { backgroundColor: '#111214' })
+  // const fileURL = window.URL.createObjectURL(blob as Blob)
+  // window.open(fileURL, 'popup', 'width=600,height=600,scrollbars=no,resizable=no')
+}
+
 export const LiveTranslatorPlugin = {
-  install (app: any, options: LiveTranslatorPluginOptions) {
-    console.log('LiveTranslator is installed')
-    new LiveTranslatorManager(options)
+  install (app: VueConstructor<Vue>, options: LiveTranslatorPluginOptions) {
+    console.log('LiveTranslator enabled')
+    const zw = new ZeroWidthEncoder()
+
+    const style = document.createElement('style')
+    style.id = 'live-translator-plugin-style'
+    style.innerHTML = `
+      .live-translator-badge-container {
+        position: absolute !important;
+        display: flex;
+        z-index: 10000;
+      }
+      .live-translator-badge {
+        background: green !important;
+        width: 10px !important;
+        height: 10px !important;
+        border-radius: 10px !important;
+        box-shadow: 0px 0px 5px black !important;
+        opacity: 0.5 !important;
+      }
+      .live-translator-badge:hover {
+        background: lightgreen !important;
+        box-shadow: 0px 0px 5px lightgreen !important;
+        opacity: 1 !important;
+      }
+    `
+    document.head.appendChild(style)
+
+    const i18nMessages = Object.keys(flatten(options.i18n.messages.en))
+    const downloadedFiles = [] as string[]
+
+    const visualize = async () => {
+      const trash = document.querySelectorAll('.live-translator-badge, .live-translator-box')
+      trash.forEach((elem) => elem.remove())
+
+      const re = new RegExp(`${zw.START}[${zw.ZERO}${zw.ONE}${zw.SPACE}]+${zw.END}`, 'gm')
+
+      const queue = [document.documentElement]
+      while (queue.length > 0) {
+        const node = queue.pop() as HTMLElement
+
+        const badges = [] as { element: HTMLElement, meta: TranslationMeta }[]
+        const boxes = [] as { element: HTMLElement, meta: TranslationMeta }[]
+        const parent = node.parentElement as HTMLElement
+
+        if (node instanceof Text) {
+          const match = (node.textContent as string).match(re)
+          if (node.textContent && match) {
+            if (match.length > 1) {
+              queue.push(node.splitText(node.textContent.indexOf(match[0]) + match[0].length) as any)
+            }
+            const meta = JSON.parse(zw.decode(match[0])) as TranslationMeta
+            badges.push({ element: createBadge(meta, options), meta })
+            boxes.push({ element: createBox(parent), meta })
+          }
+        }
+
+        const attributes = (node.attributes ? [...node.attributes] : [])
+          .map((attribute) => ({ attribute, match: attribute.value.match(re) }))
+          .filter(({ match }) => !!match)
+        for (const { attribute, match } of attributes) {
+          for (const m of (match as RegExpMatchArray)) {
+            const meta = JSON.parse(zw.decode(m)) as TranslationMeta
+            badges.push({ element: createBadge(meta, options, attribute.name), meta })
+            // boxes.push({ element: createBox(node, true), meta })
+          }
+        }
+
+        if (badges.length) {
+          let container = null
+          if (node.previousElementSibling && node.previousElementSibling.classList.contains('live-translator-badge-container')) {
+            container = node.previousElementSibling
+          } else {
+            container = document.createElement('span')
+            container.classList.add('live-translator-badge-container')
+            parent.insertBefore(container, node)
+          }
+          for (const badge of badges) {
+            if (!document.getElementById(badge.element.id)) {
+              container.appendChild(badge.element)
+            }
+          }
+        }
+
+        for (const box of boxes) {
+          if (downloadedFiles.includes(box.meta.path)) {
+            continue
+          }
+          (document.getElementById('app') as HTMLElement).appendChild(box.element)
+          // await capture()
+          console.log('download', box.meta.path)
+          box.element.remove()
+          downloadedFiles.push(box.meta.path)
+        }
+
+        for (const child of node.childNodes) {
+          queue.push(child as any)
+        }
+      }
+      const missing = i18nMessages.filter(key => !downloadedFiles.includes(key))
+      console.log(missing)
+      console.log(missing.length + '/' + i18nMessages.length)
+    }
+
+    const originalFormatter = options.i18n.formatter
+    options.i18n.formatter = {
+      interpolate (message, values, path) {
+        const meta = zw.encode(
+          JSON.stringify({
+            message,
+            values,
+            path,
+            locale: options.i18n.locale,
+            uuid: uuidv4(),
+          }),
+        )
+        const original = originalFormatter.interpolate(message, values, path) as []
+        return original.map(value => `${meta}${value}`)
+      },
+    }
+
+    const debounce = _.debounce(visualize, 200, { maxWait: 500 })
+    const observer = new MutationObserver(debounce)
+    observer.observe(document.documentElement,
+      {
+        subtree: true,
+        attributes: true,
+        characterData: true,
+        childList: false,
+      },
+    )
+    window.addEventListener('scroll', debounce)
+    window.addEventListener('resize', debounce)
   },
 }
