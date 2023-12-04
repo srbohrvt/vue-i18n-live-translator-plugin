@@ -1,4 +1,4 @@
-import VueI18n from 'vue-i18n'
+import { I18n } from 'vue-i18n'
 import throttle from 'lodash/throttle'
 
 const css = `
@@ -67,7 +67,7 @@ export type TranslationMeta = {
 }
 
 type LiveTranslatorPluginOptions = {
-  i18n: VueI18n
+  i18n: I18n
   translationLink: (meta: TranslationMeta) => string
   persist?: boolean
 }
@@ -182,11 +182,11 @@ class LiveTranslatorManager {
               message,
               values: filteredValues,
               path,
-              locale: self._options.i18n.locale,
+              locale: self._options.i18n.global.locale,
             } as TranslationMeta),
           )
         } catch (exception) {
-          console.warn(message, values, path, self._options.i18n.locale, exception)
+          console.warn(message, values, path, self._options.i18n.global.locale, exception)
         }
 
         return (original && meta && self._enabled) ? [meta, ...original] : original
@@ -212,9 +212,9 @@ class LiveTranslatorManager {
   }
 
   refreshI18n () {
-    const originalLocale = this._options.i18n.locale
-    this._options.i18n.locale = ''
-    this._options.i18n.locale = originalLocale
+    const originalLocale = this._options.i18n.global.locale
+    this._options.i18n.global.locale = ''
+    this._options.i18n.global.locale = originalLocale
   }
 
   toggle (enable?: boolean) {
